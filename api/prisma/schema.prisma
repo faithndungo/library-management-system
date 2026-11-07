@@ -1,0 +1,84 @@
+// Prisma Schema for Library Management System
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Role Enum: Defines patron vs librarian permissions
+enum Role {
+  PATRON
+  LIBRARIAN
+}
+
+// User Model: Library staff and patrons
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(PATRON)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  reviews   Review[]
+
+  @@map("users")
+}
+
+// Genre Model: Categorization for catalog books
+model Genre {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations: One genre has many books
+  books       Book[]
+
+  @@map("genres")
+}
+
+// Book Model: Individual catalog title
+model Book {
+  id              String   @id @default(uuid())
+  title           String
+  author          String
+  isbn            String   @unique
+  publicationYear Int?
+  availableCopies Int      @default(1)
+  genreId         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations: References Genre via genreId foreign key
+  genre           Genre    @relation(fields: [genreId], references: [id], onDelete: Cascade)
+  reviews         Review[]
+
+  @@map("books")
+}
+
+// Stretch Goal: Review Model
+// References Book via bookId and User via userId
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int
+  comment   String?
+  bookId    String
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
