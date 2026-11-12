@@ -1,6 +1,6 @@
-# Library Management System - Book Catalog Data Layer
+# Library Management System - Backend & Book Catalog
 
-A robust, relational data layer for a modern library book catalog built with **TypeScript**, **NestJS**, **Prisma ORM**, and **PostgreSQL**.
+A robust, enterprise-grade RESTful API and relational data layer for a library management system built with **NestJS**, **TypeScript**, **Prisma ORM**, and **PostgreSQL**.
 
 ---
 
@@ -14,32 +14,44 @@ A robust, relational data layer for a modern library book catalog built with **T
   - [User Model](#user-model)
   - [Genre Model](#genre-model)
   - [Book Model](#book-model)
-  - [Review Model (Stretch Goal)](#review-model-stretch-goal)
+  - [Review Model](#review-model)
 - [Schema Decisions](#schema-decisions)
   - [Why Book References Genre Rather Than Embedding It](#why-book-references-genre-rather-than-embedding-it)
 - [Comparative Reflection: Prisma vs. Document Databases](#comparative-reflection-prisma-vs-document-databases)
+- [Authentication & Role-Based Access Control](#authentication--role-based-access-control)
+  - [Bcrypt Password Hashing](#bcrypt-password-hashing)
+  - [JWT Strategy & JwtAuthGuard](#jwt-strategy--jwtauthguard)
+  - [Roles Decorator & RolesGuard](#roles-decorator--rolesguard)
+  - [Rate Limiting (Stretch Goal)](#rate-limiting-stretch-goal)
+- [API Endpoints](#api-endpoints)
+  - [Authentication Routes](#authentication-routes)
+  - [Users Routes (Stretch Goal)](#users-routes-stretch-goal)
+  - [Genre CRUD Routes](#genre-crud-routes)
+  - [Book Catalog Routes](#book-catalog-routes)
+- [Query Filtering, Search & Pagination](#query-filtering-search--pagination)
+- [DTO Validation](#dto-validation)
+- [Postman Collection](#postman-collection)
 - [Getting Started](#getting-started)
   - [1. Prerequisites](#1-prerequisites)
   - [2. Installation](#2-installation)
   - [3. Configure Environment Variables](#3-configure-environment-variables)
   - [4. Generate Prisma Client](#4-generate-prisma-client)
-  - [5. Run Database Migrations](#5-run-database-migrations)
-  - [6. Seed the Database](#6-seed-the-database)
-  - [7. Explore with Prisma Studio](#7-explore-with-prisma-studio)
-- [Prisma Service (NestJS Integration)](#prisma-service-nestjs-integration)
+  - [5. Run Migrations & Seed](#5-run-migrations--seed)
+  - [6. Start the Server](#6-start-the-server)
 - [Verification & Checklist](#verification--checklist)
 
 ---
 
 ## Overview
 
-This project implements the core data layer for a library catalog management system. It provides a strongly typed, relational database schema configured using Prisma ORM, ready to connect to local or hosted PostgreSQL instances (such as Supabase, Neon, Railway, or standard PostgreSQL).
-
-The architecture features:
-- **Role-Based Authorization Foundations**: Distinct `PATRON` and `LIBRARIAN` roles via a Prisma `enum`.
-- **Normalized Relational Data Design**: Clean separation of concerns between books, genres, users, and user reviews.
-- **Enterprise-Ready NestJS Integration**: A singleton `PrismaService` extending `PrismaClient` and implementing `OnModuleInit` to guarantee managed database connection lifecycles.
-- **Automated Seed Script**: Comprehensive seeding mechanism populating 5 genres, 17 curated books, 3 user accounts, and initial book reviews.
+This project delivers the full backend core for a library catalog management system:
+- **Full Genre CRUD**: Create, read (list and individual), update, and delete catalog genres.
+- **Advanced Book Catalog**: Full book management featuring search by title or author, category/genre filtering, and offset-based pagination.
+- **Authentication & Security**: Secure registration and login issuing signed JSON Web Tokens (JWTs), with passwords hashed using salt-rounds-backed **bcrypt**.
+- **Role-Based Authorization (RBAC)**: Fine-grained access control with `@Roles()` decorator and `RolesGuard`, restricting book mutations to `LIBRARIAN` accounts.
+- **DTO Validation**: Strict runtime request validation using `class-validator` and `ValidationPipe({ whitelist: true })`.
+- **Rate Limiting**: Anti-brute-force rate limiting on `/auth/login` using `@nestjs/throttler`.
+- **User Profile**: Protected `/users/profile` endpoint extracting user identity using `@Req()`.
 
 ---
 
@@ -48,19 +60,52 @@ The architecture features:
 ```
 library-management-system/
 ├── api/
-│   ├── .env.example              # Placeholder environment template (no secrets committed)
-│   ├── .gitignore                # Ignores .env, node_modules, and build outputs
-│   ├── package.json              # Dependencies, scripts, and Prisma seed configuration
-│   ├── tsconfig.json             # TypeScript compiler configuration
+│   ├── .env.example                     # Environment template (DATABASE_URL, JWT_SECRET, PORT)
+│   ├── .gitignore                       # Ignores .env, node_modules, dist/
+│   ├── package.json                     # Dependencies, scripts, and Prisma seed configuration
+│   ├── tsconfig.json                    # TypeScript compiler configuration
 │   ├── prisma/
-│   │   ├── schema.prisma         # Declarative Prisma schema (PostgreSQL)
-│   │   └── seed.ts               # Database seed script (5 genres, 17 books, users, reviews)
+│   │   ├── schema.prisma                # Relational schema (PostgreSQL)
+│   │   └── seed.ts                      # Database seed script (5 genres, 17 books, users, reviews)
 │   └── src/
-│       └── prisma/
-│           ├── prisma.service.ts # PrismaService extending PrismaClient & OnModuleInit
-│           └── prisma.module.ts  # Global NestJS module exporting PrismaService
-├── .gitignore                    # Root repository ignore rules
-└── README.md                     # Documentation and Schema Decisions rationale
+│       ├── main.ts                      # Bootstrap: ValidationPipe & CORS configured
+│       ├── app.module.ts                # Root application module
+│       ├── prisma/
+│       │   ├── prisma.service.ts        # PrismaService extending PrismaClient & OnModuleInit
+│       │   └── prisma.module.ts         # Global module exporting PrismaService
+│       ├── auth/
+│       │   ├── dto/
+│       │   │   ├── register.dto.ts      # Validates email, password (min 6), name, optional role
+│       │   │   └── login.dto.ts         # Validates email and password
+│       │   ├── auth.controller.ts       # POST /auth/register & POST /auth/login (throttled)
+│       │   ├── auth.service.ts          # Hashes passwords with bcrypt, verifies, signs JWT
+│       │   ├── auth.module.ts           # Configures Passport, JwtModule, Throttler
+│       │   ├── jwt.strategy.ts          # Verifies tokens using JWT_SECRET
+│       │   ├── jwt-auth.guard.ts        # AuthGuard('jwt') wrapper
+│       │   ├── roles.decorator.ts       # @Roles() metadata decorator
+│       │   └── roles.guard.ts           # Guards routes checking req.user.role
+│       ├── genres/
+│       │   ├── dto/
+│       │   │   ├── create-genre.dto.ts  # Validates name and optional description
+│       │   │   └── update-genre.dto.ts  # PartialType(CreateGenreDto)
+│       │   ├── genres.controller.ts     # Full CRUD (create, findAll, findOne, update, remove)
+│       │   ├── genres.service.ts        # Business logic & Prisma operations
+│       │   └── genres.module.ts
+│       ├── books/
+│       │   ├── dto/
+│       │   │   ├── create-book.dto.ts   # class-validator on title, author, isbn, totalCopies, genreId
+│       │   │   └── update-book.dto.ts   # PartialType(CreateBookDto)
+│       │   ├── books.controller.ts      # GET (reads genreId, search, page, limit); guarded POST/PATCH/DELETE
+│       │   ├── books.service.ts         # Builds Prisma where clause & applies skip/take
+│       │   └── books.module.ts
+│       └── users/
+│           ├── users.controller.ts      # GET /users/profile using @Req()
+│           ├── users.service.ts
+│           └── users.module.ts
+├── docs/
+│   └── postman_collection.json          # Postman collection for every endpoint built
+├── .gitignore
+└── README.md
 ```
 
 ---
@@ -81,6 +126,7 @@ erDiagram
     User {
         String id PK "UUID"
         String email UK
+        String password "Bcrypt hash"
         String name
         Role role "PATRON | LIBRARIAN"
         DateTime createdAt
@@ -101,6 +147,7 @@ erDiagram
         String author
         String isbn UK
         Int publicationYear
+        Int totalCopies
         Int availableCopies
         String genreId FK
         DateTime createdAt
@@ -124,7 +171,7 @@ erDiagram
 
 ### Role Enum
 Defines permissions across the application:
-- `PATRON`: Standard library member capable of browsing books, checking availability, and submitting reviews.
+- `PATRON`: Standard library member capable of browsing books, searching, and submitting reviews.
 - `LIBRARIAN`: Administrative staff with catalog maintenance, book inventory management, and circulation privileges.
 
 ```prisma
@@ -135,13 +182,14 @@ enum Role {
 ```
 
 ### User Model
-Represents both library staff and patrons, linking reviews back to an authenticated profile.
+Represents library patrons and staff with hashed passwords and role assignment.
 
 ```prisma
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   name      String
+  password  String   @default("")
   role      Role     @default(PATRON)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -153,7 +201,7 @@ model User {
 ```
 
 ### Genre Model
-Acts as a centralized taxonomy entity for books. Enforces unique genre names and optional descriptions.
+Acts as a centralized taxonomy entity for books. Enforces unique genre names.
 
 ```prisma
 model Genre {
@@ -170,7 +218,7 @@ model Genre {
 ```
 
 ### Book Model
-The core entity of the library catalog. Contains publication metadata, stock count, and maintains a foreign key relation to `Genre`.
+Contains catalog metadata, total copies, available copies, and foreign key `genreId` referencing `Genre`.
 
 ```prisma
 model Book {
@@ -179,6 +227,7 @@ model Book {
   author          String
   isbn            String   @unique
   publicationYear Int?
+  totalCopies     Int      @default(1)
   availableCopies Int      @default(1)
   genreId         String
   createdAt       DateTime @default(now())
@@ -191,8 +240,8 @@ model Book {
 }
 ```
 
-### Review Model (Stretch Goal)
-Enables patrons to rate and comment on books. Relates both to `Book` via `bookId` and `User` via `userId`.
+### Review Model
+Enables patrons to rate and comment on books. Relates to `Book` and `User`.
 
 ```prisma
 model Review {
@@ -259,115 +308,175 @@ PostgreSQL excels at indexed joins. By indexing `genreId`, filtering books by ge
 
 ---
 
+## Authentication & Role-Based Access Control
+
+### Bcrypt Password Hashing
+All user passwords submitted during registration (`POST /auth/register`) are salted and hashed using `bcrypt` (10 rounds) before persisting to PostgreSQL. Plaintext passwords are never saved or returned in API responses.
+
+### JWT Strategy & JwtAuthGuard
+- **`JwtStrategy`** (`api/src/auth/jwt.strategy.ts`): Extends `PassportStrategy(Strategy)`. Extracts the bearer token from the `Authorization` header, verifies the signature against `JWT_SECRET`, and verifies that the subject user still exists in PostgreSQL.
+- **`JwtAuthGuard`** (`api/src/auth/jwt-auth.guard.ts`): Extends `AuthGuard('jwt')`, enabling route protection via `@UseGuards(JwtAuthGuard)`.
+
+### Roles Decorator & RolesGuard
+- **`@Roles()`** (`api/src/auth/roles.decorator.ts`): Attaches required role metadata (e.g. `@Roles(Role.LIBRARIAN)`) to route handlers.
+- **`RolesGuard`** (`api/src/auth/roles.guard.ts`): Implements `CanActivate`. Retrieves role requirements using NestJS `Reflector`, extracts `req.user.role`, and rejects non-matching accounts with a `403 ForbiddenException`.
+
+### Rate Limiting (Stretch Goal)
+The `POST /auth/login` endpoint is rate limited using `@nestjs/throttler` (`@UseGuards(ThrottlerGuard)` and `@Throttle({ default: { limit: 5, ttl: 60000 } })`) to protect against brute-force credential stuffing.
+
+---
+
+## API Endpoints
+
+### Authentication Routes
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/auth/register` | Public | Register a new user (`email`, `password`, `name`, optional `role`). |
+| `POST` | `/auth/login` | Public (Throttled) | Authenticate user credentials and return `{ access_token, user }`. |
+
+### Users Routes (Stretch Goal)
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/users/profile` | Authenticated (JWT) | Returns current authenticated user via `@Req() req.user`. |
+
+### Genre CRUD Routes
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/genres` | Public / Admin | Create a new genre with `CreateGenreDto`. |
+| `GET` | `/genres` | Public | Retrieve all genres with count of books. |
+| `GET` | `/genres/:id` | Public | Retrieve a single genre by UUID with its books. |
+| `PATCH` | `/genres/:id` | Public / Admin | Update a genre name or description with `UpdateGenreDto`. |
+| `DELETE` | `/genres/:id` | Public / Admin | Remove a genre by ID (cascades to books). |
+
+### Book Catalog Routes
+| Method | Endpoint | Access | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/books` | Public | List books with query filtering (`genreId`), search (`search`), and pagination (`page`, `limit`). |
+| `GET` | `/books/:id` | Public | Retrieve a book by UUID including genre and reviews. |
+| `POST` | `/books` | **Guarded (Librarian)** | Create a book with `CreateBookDto`. |
+| `PATCH` | `/books/:id` | **Guarded (Librarian)** | Update book details with `UpdateBookDto`. |
+| `DELETE` | `/books/:id` | **Guarded (Librarian)** | Remove a book from the catalog. |
+
+---
+
+## Query Filtering, Search & Pagination
+
+The `GET /books` endpoint accepts the following query parameters:
+
+- `genreId` *(optional string)*: Filters books belonging to a specific genre UUID.
+- `search` *(optional string)*: Case-insensitive search matching against book `title` OR `author`.
+- `page` *(optional integer, default: 1)*: Page number for pagination.
+- `limit` *(optional integer, default: 10)*: Number of books per page.
+
+### Implementation in `BooksService`:
+```typescript
+const where: Prisma.BookWhereInput = {};
+
+if (genreId) {
+  where.genreId = genreId;
+}
+
+if (search) {
+  where.OR = [
+    { title: { contains: search, mode: 'insensitive' } },
+    { author: { contains: search, mode: 'insensitive' } },
+  ];
+}
+
+const pageNumber = page ? Math.max(1, Number(page)) : 1;
+const pageSize = limit ? Math.max(1, Number(limit)) : 10;
+const skip = (pageNumber - 1) * pageSize;
+const take = pageSize;
+
+const [books, total] = await Promise.all([
+  this.prisma.book.findMany({ where, skip, take, include: { genre: true }, orderBy: { createdAt: 'desc' } }),
+  this.prisma.book.count({ where }),
+]);
+```
+
+---
+
+## DTO Validation
+
+All incoming request payloads are automatically validated via the global `ValidationPipe({ whitelist: true })`:
+
+- **`CreateBookDto`**:
+  - `title`: `@IsString() @IsNotEmpty()`
+  - `author`: `@IsString() @IsNotEmpty()`
+  - `isbn`: `@IsString() @IsNotEmpty()`
+  - `totalCopies`: `@IsInt() @IsPositive() @Min(1)`
+  - `genreId`: `@IsString() @IsNotEmpty() @IsUUID()`
+  - `publicationYear`: `@IsOptional() @IsInt()`
+- **`CreateGenreDto`**:
+  - `name`: `@IsString() @IsNotEmpty()`
+  - `description`: `@IsOptional() @IsString()`
+- **`RegisterDto`**:
+  - `email`: `@IsEmail() @IsNotEmpty()`
+  - `password`: `@IsString() @IsNotEmpty() @MinLength(6)`
+  - `name`: `@IsString() @IsNotEmpty()`
+  - `role`: `@IsOptional() @IsEnum(Role)`
+
+---
+
+## Postman Collection
+
+The Postman collection is located at [`docs/postman_collection.json`](file:///c:/Users/HomePC/Desktop/PLP/library-management-system/docs/postman_collection.json).
+
+It includes preconfigured requests with automatic environment variable capture for:
+1. `POST /auth/register` (Patron and Librarian registration)
+2. `POST /auth/login` (Automatically saves `patronToken` and `librarianToken`)
+3. `GET /users/profile` (Using Bearer authorization)
+4. Full `Genre` CRUD (`POST`, `GET`, `GET :id`, `PATCH :id`, `DELETE :id`)
+5. Full `Book` catalog (`GET` with search/pagination/filters, `GET :id`, guarded `POST`, guarded `PATCH`, guarded `DELETE`)
+
+---
+
 ## Getting Started
 
 ### 1. Prerequisites
-- **Node.js**: `v18.x` or `v20.x` or `v22.x`
-- **npm** or **pnpm**
-- **PostgreSQL**: Local instance running on port `5432` OR a hosted database (e.g., [Neon](https://neon.tech), [Supabase](https://supabase.com), [Render](https://render.com), [Railway](https://railway.app)).
+- **Node.js**: `v18.x`, `v20.x`, or `v22.x`
+- **PostgreSQL**: Local instance or hosted service (e.g., Supabase, Neon, Railway)
 
 ### 2. Installation
-Navigate into the `api` directory and install the project dependencies:
-
 ```bash
 cd api
 npm install
 ```
 
 ### 3. Configure Environment Variables
-Copy `.env.example` to `.env` inside the `api` folder:
-
+Copy `.env.example` to `.env`:
 ```bash
 cp .env.example .env
 ```
-
-Open `.env` and set your `DATABASE_URL`:
+Edit `.env` with your PostgreSQL database URL and JWT secret:
 ```env
-# Example connection string:
-DATABASE_URL="postgresql://postgres:your_password@localhost:5432/library_db?schema=public"
+DATABASE_URL="postgresql://<username>:<password>@<host>:<port>/<dbname>?schema=public"
+JWT_SECRET="your-super-secret-jwt-key"
+PORT=3000
 ```
 
-> **Security Note:** `.env` is listed in `.gitignore` and must never be committed to source control.
-
 ### 4. Generate Prisma Client
-Generate the strongly typed Prisma Client artifacts based on `schema.prisma`:
-
 ```bash
 npm run prisma:generate
 ```
 
-### 5. Run Database Migrations
-Create and apply migrations to your PostgreSQL database:
-
+### 5. Run Migrations & Seed
 ```bash
 npm run prisma:migrate
-```
-*(When prompted, provide a migration name such as `init_library_catalog`).*
-
-Alternatively, to quickly synchronize the schema directly to a development database:
-```bash
-npm run prisma:push
-```
-
-### 6. Seed the Database
-Execute the database seed script to populate genres, books, users, and reviews:
-
-```bash
 npm run prisma:seed
 ```
 
-You will see output confirming insertion:
-```
-🌱 Starting database seed...
-Seeding 5 genres...
-Seeding initial users...
-Seeding books...
-Seeding sample reviews (Stretch Goal)...
-✅ Seed completed successfully:
- - 5 Genres
- - 17 Books
- - 3 Users (1 Librarian, 2 Patrons)
- - 3 Reviews
-```
-
-### 7. Explore with Prisma Studio
-Open Prisma's interactive GUI in your browser to inspect and manage your data:
-
+### 6. Start the Server
 ```bash
-npm run prisma:studio
+# Production build & run
+npm run build
+npm start
+
+# Or development mode with auto-reload
+npm run start:dev
 ```
 
----
-
-## Prisma Service (NestJS Integration)
-
-The application provides a clean, production-ready `PrismaService` conforming to NestJS standards located at `api/src/prisma/prisma.service.ts`:
-
-```typescript
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-
-@Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
-  async onModuleInit() {
-    await this.$connect();
-  }
-}
-```
-
-This service can be injected into any NestJS service or controller across the application:
-```typescript
-@Injectable()
-export class BooksService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  async findAll() {
-    return this.prisma.book.findMany({
-      include: { genre: true, reviews: true },
-    });
-  }
-}
-```
+The API will be available at `http://localhost:3000`.
 
 ---
 
@@ -375,14 +484,16 @@ export class BooksService {
 
 | Requirement | Target File | Status |
 | :--- | :--- | :---: |
-| **Role Enum (`PATRON`, `LIBRARIAN`)** | `api/prisma/schema.prisma` | ✅ |
-| **User Model using `Role`** | `api/prisma/schema.prisma` | ✅ |
-| **Genre Model** | `api/prisma/schema.prisma` | ✅ |
-| **Book Model with `genreId` FK & `@relation`** | `api/prisma/schema.prisma` | ✅ |
-| **Stretch: Review Model relation (`bookId`, `userId`, `rating`, `comment`)** | `api/prisma/schema.prisma` | ✅ |
-| **Seed script with 4+ genres & 15+ books** | `api/prisma/seed.ts` (5 Genres, 17 Books) | ✅ |
-| **PrismaService extends `PrismaClient` + `OnModuleInit` + `this.$connect()`** | `api/src/prisma/prisma.service.ts` | ✅ |
-| **`.env.example` with `DATABASE_URL` placeholder** | `api/.env.example` | ✅ |
-| **README 'Schema Decisions' section on referencing vs embedding** | `README.md` | ✅ |
-| **Stretch: Reflection on Prisma vs Document Database** | `README.md` | ✅ |
-
+| **Full CRUD for Genre** | `api/src/genres/genres.controller.ts, genres.service.ts, genres.module.ts` | ✅ |
+| **`CreateBookDto` class-validator on all fields** (`title`, `author`, `isbn`, `totalCopies`, `genreId`) | `api/src/books/dto/create-book.dto.ts` | ✅ |
+| **`GET /books` reads `genreId`, `search`, `page`, `limit` from `@Query()`** | `api/src/books/books.controller.ts` | ✅ |
+| **Guarded `POST/PATCH/DELETE` on `/books`** | `api/src/books/books.controller.ts` | ✅ |
+| **`findAll()` builds Prisma `where` & applies `skip/take`** | `api/src/books/books.service.ts` | ✅ |
+| **`POST /auth/register` & `POST /auth/login` with bcrypt password hashing** | `api/src/auth/auth.controller.ts, auth.service.ts, auth.module.ts` | ✅ |
+| **`JwtStrategy` verifies tokens with `JWT_SECRET`; `JwtAuthGuard` extends `AuthGuard('jwt')`** | `api/src/auth/jwt.strategy.ts, jwt-auth.guard.ts` | ✅ |
+| **`@Roles()` decorator + `RolesGuard` checking `req.user.role`** | `api/src/auth/roles.decorator.ts, roles.guard.ts` | ✅ |
+| **`ValidationPipe({ whitelist: true })` & `enableCors()` in `main.ts`** | `api/src/main.ts` | ✅ |
+| **Collection for every endpoint built** | `docs/postman_collection.json` | ✅ |
+| **Stretch: `GET /users/profile` using `@Req()`** | `api/src/users/users.controller.ts` | ✅ |
+| **Stretch: Rate limit login with `@nestjs/throttler`** | `api/src/auth/auth.controller.ts` | ✅ |
+| **Schema Decisions & Comparative Reflection** | `README.md` | ✅ |

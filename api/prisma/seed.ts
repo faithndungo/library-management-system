@@ -1,4 +1,5 @@
 import { PrismaClient, Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
@@ -41,34 +42,45 @@ async function main() {
     genresMap[genre.name] = record.id;
   }
 
-  // 2. Seed Users (with Role enum: PATRON, LIBRARIAN)
+  // 2. Seed Users (with Role enum: PATRON, LIBRARIAN, hashed passwords)
   console.log('Seeding initial users...');
+  const defaultPasswordHash = await bcrypt.hash('password123', 10);
+
   const librarian = await prisma.user.upsert({
     where: { email: 'librarian@library.org' },
-    update: {},
+    update: {
+      password: defaultPasswordHash,
+    },
     create: {
       email: 'librarian@library.org',
       name: 'Sarah Jenkins',
+      password: defaultPasswordHash,
       role: Role.LIBRARIAN,
     },
   });
 
   const patronAlice = await prisma.user.upsert({
     where: { email: 'alice.patron@example.com' },
-    update: {},
+    update: {
+      password: defaultPasswordHash,
+    },
     create: {
       email: 'alice.patron@example.com',
       name: 'Alice Johnson',
+      password: defaultPasswordHash,
       role: Role.PATRON,
     },
   });
 
   const patronBob = await prisma.user.upsert({
     where: { email: 'bob.patron@example.com' },
-    update: {},
+    update: {
+      password: defaultPasswordHash,
+    },
     create: {
       email: 'bob.patron@example.com',
       name: 'Bob Martinez',
+      password: defaultPasswordHash,
       role: Role.PATRON,
     },
   });
@@ -82,6 +94,7 @@ async function main() {
       author: 'Frank Herbert',
       isbn: '978-0441172719',
       publicationYear: 1965,
+      totalCopies: 4,
       availableCopies: 4,
       genreName: 'Science Fiction',
     },
@@ -90,6 +103,7 @@ async function main() {
       author: 'William Gibson',
       isbn: '978-0441569595',
       publicationYear: 1984,
+      totalCopies: 3,
       availableCopies: 3,
       genreName: 'Science Fiction',
     },
@@ -98,6 +112,7 @@ async function main() {
       author: 'Isaac Asimov',
       isbn: '978-0553293357',
       publicationYear: 1951,
+      totalCopies: 2,
       availableCopies: 2,
       genreName: 'Science Fiction',
     },
@@ -106,6 +121,7 @@ async function main() {
       author: 'Neal Stephenson',
       isbn: '978-0553380958',
       publicationYear: 1992,
+      totalCopies: 3,
       availableCopies: 3,
       genreName: 'Science Fiction',
     },
@@ -116,6 +132,7 @@ async function main() {
       author: 'J.R.R. Tolkien',
       isbn: '978-0547928227',
       publicationYear: 1937,
+      totalCopies: 5,
       availableCopies: 5,
       genreName: 'Fantasy',
     },
@@ -124,6 +141,7 @@ async function main() {
       author: 'George R.R. Martin',
       isbn: '978-0553103540',
       publicationYear: 1996,
+      totalCopies: 4,
       availableCopies: 4,
       genreName: 'Fantasy',
     },
@@ -132,6 +150,7 @@ async function main() {
       author: 'Patrick Rothfuss',
       isbn: '978-0756404741',
       publicationYear: 2007,
+      totalCopies: 3,
       availableCopies: 3,
       genreName: 'Fantasy',
     },
@@ -140,6 +159,7 @@ async function main() {
       author: 'Brandon Sanderson',
       isbn: '978-0765326355',
       publicationYear: 2010,
+      totalCopies: 2,
       availableCopies: 2,
       genreName: 'Fantasy',
     },
@@ -150,6 +170,7 @@ async function main() {
       author: 'Dan Brown',
       isbn: '978-0307474278',
       publicationYear: 2003,
+      totalCopies: 6,
       availableCopies: 6,
       genreName: 'Mystery & Thriller',
     },
@@ -158,6 +179,7 @@ async function main() {
       author: 'Gillian Flynn',
       isbn: '978-0307588371',
       publicationYear: 2012,
+      totalCopies: 4,
       availableCopies: 4,
       genreName: 'Mystery & Thriller',
     },
@@ -166,6 +188,7 @@ async function main() {
       author: 'Stieg Larsson',
       isbn: '978-0307454546',
       publicationYear: 2005,
+      totalCopies: 3,
       availableCopies: 3,
       genreName: 'Mystery & Thriller',
     },
@@ -174,6 +197,7 @@ async function main() {
       author: 'Agatha Christie',
       isbn: '978-0062073488',
       publicationYear: 1939,
+      totalCopies: 5,
       availableCopies: 5,
       genreName: 'Mystery & Thriller',
     },
@@ -184,6 +208,7 @@ async function main() {
       author: 'Markus Zusak',
       isbn: '978-0375842207',
       publicationYear: 2005,
+      totalCopies: 4,
       availableCopies: 4,
       genreName: 'Historical Fiction',
     },
@@ -192,6 +217,7 @@ async function main() {
       author: 'Anthony Doerr',
       isbn: '978-1476746586',
       publicationYear: 2014,
+      totalCopies: 3,
       availableCopies: 3,
       genreName: 'Historical Fiction',
     },
@@ -200,6 +226,7 @@ async function main() {
       author: 'Ken Follett',
       isbn: '978-0451166890',
       publicationYear: 1989,
+      totalCopies: 2,
       availableCopies: 2,
       genreName: 'Historical Fiction',
     },
@@ -210,6 +237,7 @@ async function main() {
       author: 'Yuval Noah Harari',
       isbn: '978-0062316097',
       publicationYear: 2014,
+      totalCopies: 5,
       availableCopies: 5,
       genreName: 'Non-Fiction',
     },
@@ -218,6 +246,7 @@ async function main() {
       author: 'James Clear',
       isbn: '978-0735211292',
       publicationYear: 2018,
+      totalCopies: 7,
       availableCopies: 7,
       genreName: 'Non-Fiction',
     },
@@ -233,6 +262,7 @@ async function main() {
         title: b.title,
         author: b.author,
         publicationYear: b.publicationYear,
+        totalCopies: b.totalCopies,
         availableCopies: b.availableCopies,
         genreId: genreId,
       },
@@ -241,6 +271,7 @@ async function main() {
         author: b.author,
         isbn: b.isbn,
         publicationYear: b.publicationYear,
+        totalCopies: b.totalCopies,
         availableCopies: b.availableCopies,
         genreId: genreId,
       },
@@ -305,7 +336,7 @@ async function main() {
   console.log('✅ Seed completed successfully:');
   console.log(` - ${genresData.length} Genres`);
   console.log(` - ${booksData.length} Books`);
-  console.log(` - 3 Users (1 Librarian, 2 Patrons)`);
+  console.log(` - 3 Users (1 Librarian, 2 Patrons; password: password123)`);
   console.log(` - 3 Reviews`);
 }
 
@@ -317,4 +348,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

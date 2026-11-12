@@ -21,6 +21,7 @@ model User {
   id        String   @id @default(uuid())
   email     String   @unique
   name      String
+  password  String   @default("")
   role      Role     @default(PATRON)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -52,6 +53,7 @@ model Book {
   author          String
   isbn            String   @unique
   publicationYear Int?
+  totalCopies     Int      @default(1)
   availableCopies Int      @default(1)
   genreId         String
   createdAt       DateTime @default(now())
@@ -81,4 +83,3 @@ model Review {
 
   @@map("reviews")
 }
-
