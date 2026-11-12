@@ -38,3 +38,4 @@ export class CreateBookDto {
   @IsInt()
   publicationYear?: number;
 }
+

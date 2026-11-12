@@ -28,3 +28,4 @@ export class RegisterDto {
   })
   role?: Role;
 }
+
